@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Virtual Business Card Generator</title>
+
+  <!-- html2canvas (for snapshot) and jsPDF (for PDF) from CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+  <style>
+    :root{
+      --card-w: 420px;         /* visual width of preview */
+      --card-h: 240px;         /* visual height of preview */
+      --accent: #1e88e5;
+      --bg: #ffffff;
+      --text: #111827;
+      --muted: #6b7280;
+      --accent-contrast: #ffffff;
+    }
+
+    body{
+      font-family: Inter, "Segoe UI", Roboto, Arial, serif;
+      margin: 0;
+      padding: 24px;
+      background: #f3f4f6;
+      color: #111827;
+      -webkit-font-smoothing:antialiased;
+    }
+
+    .container{
+      max-width: 1100px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 380px 1fr;
+      gap: 24px;
+      align-items: start;
+    }
+
+    /* Left: controls */
+    .panel {
+      background: white;
+      border-radius: 8px;
+      padding: 18px;
+      box-shadow: 0 8px 24px rgba(15,23,42,0.06);
+    }
+
+    .panel h2 { margin: 0 0 12px 0; font-size: 18px; }
+    .field { margin-bottom: 12px; }
+    .field label { display:block; font-size: 13px; color:var(--muted); margin-bottom:6px; }
+    .field input, .field select, .field textarea {
+      width:100%;
+      padding:8px 10px;
+      font-size:15px;
+      border:1px solid #e6e7ea;
+      border-radius:6px;
+      box-sizing:border-box;
+      background: #fff;
+    }
+    .field textarea { min-height:70px; resize:vertical; }
+
+    .themes {
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+      margin-top:6px;
+    }
+
+    .theme-swatch {
+      width:44px; height:32px; border-radius:6px; cursor:pointer;
+      border:2px solid transparent; box-sizing:border-box;
+    }
+    .theme-swatch.selected { outline:3px solid rgba(0,0,0,0.08); transform:translateY(-2px); }
+
+    .controls-row {
+      display:flex; gap:8px; align-items:center; margin-top:14px;
+    }
+
+    .btn {
+      display:inline-block;
+      padding:10px 14px;
+      background:var(--accent);
+      color:var(--accent-contrast);
+      border-radius:8px;
+      border:none;
+      cursor:pointer;
+      font-weight:600;
+      box-shadow: 0 6px 18px rgba(30,88,153,0.12);
+    }
+    .btn.ghost {
+      background: transparent;
+      color: var(--text);
+      border:1px solid #e6e7ea;
+      box-shadow:none;
+    }
+
+    .info {
+      font-size:13px; color:var(--muted); margin-top:10px;
+    }
+
+    /* Right: preview area */
+    .preview-area {
+      display:flex;
+      flex-direction:column;
+      gap:16px;
+    }
+
+    .card-wrap {
+      background: transparent;
+      padding: 18px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+    }
+
+    /* The business card itself */
+    .biz-card {
+      width: var(--card-w);
+      height: var(--card-h);
+      border-radius: 12px;
+      box-shadow: 0 10px 30px rgba(16,24,40,0.12);
+      display:flex;
+      overflow:hidden;
+      font-family: "Segoe UI", Roboto, Arial, sans-serif;
+      box-sizing:border-box;
+    }
+
+    .left-side {
+      flex: 1;
+      padding: 16px 18px;
+      display:flex;
+      flex-direction:column;
+      justify-content:center;
+      gap:6px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.02));
+    }
+
+    .brand {
+      font-weight:700;
+      font-size:16px;
+      letter-spacing:0.4px;
+      color: var(--text);
+      display:flex;
+      align-items:center;
+      gap:8px;
+    }
+    .logo-dot{
+      width:34px;height:34px;border-radius:8px;background:var(--accent);
+      display:inline-block;box-shadow: inset 0 -4px 8px rgba(0,0,0,0.08);
+    }
+    .name { font-size:18px; font-weight:700; color:var(--text); }
+    .title { font-size:13px; color:var(--muted); margin-bottom:6px; }
+    .company { font-size:13px; color:var(--muted); margin-bottom:8px; }
+
+    .contact {
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+      margin-top:8px;
+    }
+    .contact .row { font-size:13px; color:var(--text); display:flex; gap:8px; align-items:center; }
+    .muted { color:var(--muted); font-size:12px; }
+
+    .right-side {
+      width: 110px;
+      background: var(--accent);
+      color: var(--accent-contrast);
+      display:flex;
+      flex-direction:column;
+      justify-content:center;
+      align-items:center;
+      padding:10px;
+      gap:6px;
+    }
+    .right-side .role { font-weight:700; text-align:center; font-size:13.5px; }
+    .right-side .small { font-size:11px; opacity:0.95; }
+
+    /* responsive */
+    @media (max-width:980px){
+      .container { grid-template-columns: 1fr; padding: 12px; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <!-- Controls -->
+    <div class="panel" id="controls">
+      <h2>Business Card Generator</h2>
+
+      <div class="field">
+        <label for="name">Full Name</label>
+        <input id="name" placeholder="e.g. Jane Doe" value="Jane Doe">
+      </div>
+
+      <div class="field">
+        <label for="title">Job Title</label>
+        <input id="title" placeholder="e.g. Product Designer" value="Product Designer">
+      </div>
+
+      <div class="field">
+        <label for="company">Company</label>
+        <input id="company" placeholder="e.g. Acme Co." value="Acme Co.">
+      </div>
+
+      <div class="field">
+        <label for="email">Email</label>
+        <input id="email" placeholder="e.g. jane@acme.com" value="jane@acme.com">
+      </div>
+
+      <div class="field">
+        <label for="phone">Phone</label>
+        <input id="phone" placeholder="e.g. +1 555 555 5555" value="+1 555 555 5555">
+      </div>
+
+      <div class="field">
+        <label>Choose a theme</label>
+        <div class="themes" id="themes">
+          <!-- theme swatches (data attributes hold theme values) -->
+          <div class="theme-swatch selected" data-accent="#1e88e5" data-bg="#ffffff" data-text="#0f172a" style="background:#1e88e5"></div>
+          <div class="theme-swatch" data-accent="#16a34a" data-bg="#ffffff" data-text="#0f172a" style="background:#16a34a"></div>
+          <div class="theme-swatch" data-accent="#ef4444" data-bg="#fffaf0" data-text="#1f2937" style="background:#ef4444"></div>
+          <div class="theme-swatch" data-accent="#8b5cf6" data-bg="#111827" data-text="#f8fafc" style="background:#8b5cf6"></div>
+          <div class="theme-swatch" data-accent="#0ea5a4" data-bg="#f8fafc" data-text="#0f172a" style="background:#0ea5a4"></div>
+        </div>
+      </div>
+
+      <div class="controls-row">
+        <button class="btn" id="download-png">Download PNG</button>
+        <button class="btn ghost" id="download-pdf">Download PDF</button>
+      </div>
+
+      <p class="info">Tip: edit fields on the left — the preview updates live. PNG is a direct image of the card; PDF places the image into an A4-style PDF.</p>
+    </div>
+
+    <!-- Preview -->
+    <div class="preview-area">
+      <div class="panel card-wrap">
+        <!-- This is the element we will capture with html2canvas -->
+        <div class="biz-card" id="bizCard" role="region" aria-label="Business card preview">
+          <div class="left-side">
+            <div class="brand">
+              <span class="logo-dot" id="logoDot" aria-hidden="true"></span>
+              <span class="company" id="previewCompany">Acme Co.</span>
+            </div>
+
+            <div style="margin-top:6px">
+              <div class="name" id="previewName">Jane Doe</div>
+              <div class="title" id="previewTitle">Product Designer</div>
+            </div>
+
+            <div class="contact" style="margin-top:8px">
+              <div class="row"><span class="muted">✉</span><span id="previewEmail">jane@acme.com</span></div>
+              <div class="row"><span class="muted">☎</span><span id="previewPhone">+1 555 555 5555</span></div>
+            </div>
+          </div>
+
+          <div class="right-side">
+            <div class="role" id="previewRole">Connect</div>
+            <div class="small">Virtual Card</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3 style="margin-top:0">How it works (brief)</h3>
+        <ol>
+          <li>Type your details into the input fields on the left.</li>
+          <li>Pick a theme to change accent/background/text colors instantly.</li>
+          <li>Click <strong>Download PNG</strong> to save the visual card as an image.</li>
+          <li>Click <strong>Download PDF</strong> to embed the image into a PDF (suitable for sharing/printing).</li>
+        </ol>
+        <p class="info">Everything runs on the client — no upload needed. Works in modern browsers.</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // --------------------------
+    // Elements
+    // --------------------------
+    const inputName  = document.getElementById('name');
+    const inputTitle = document.getElementById('title');
+    const inputComp  = document.getElementById('company');
+    const inputEmail = document.getElementById('email');
+    const inputPhone = document.getElementById('phone');
+
+    const previewName  = document.getElementById('previewName');
+    const previewTitle = document.getElementById('previewTitle');
+    const previewCompany = document.getElementById('previewCompany');
+    const previewEmail = document.getElementById('previewEmail');
+    const previewPhone = document.getElementById('previewPhone');
+    const bizCard = document.getElementById('bizCard');
+    const logoDot = document.getElementById('logoDot');
+    const themes = document.getElementById('themes');
+
+    // initialize preview with default values
+    function updatePreview(){
+      previewName.textContent = inputName.value || 'Full Name';
+      previewTitle.textContent = inputTitle.value || 'Job Title';
+      previewCompany.textContent = inputComp.value || 'Company';
+      previewEmail.textContent = inputEmail.value || 'email@domain.com';
+      previewPhone.textContent = inputPhone.value || 'Phone';
+    }
+
+    // attach listeners to inputs for live update
+    [inputName, inputTitle, inputComp, inputEmail, inputPhone].forEach(el=>{
+      el.addEventListener('input', updatePreview);
+    });
+
+    updatePreview();
+
+    // --------------------------
+    // Theme handling
+    // --------------------------
+    function applyTheme(accent, bg, text){
+      // set CSS variables on root (for preview)
+      document.documentElement.style.setProperty('--accent', accent);
+      document.documentElement.style.setProperty('--bg', bg);
+      document.documentElement.style.setProperty('--text', text);
+
+      // depending on bg/text, adjust contrast for right side text
+      // set biz-card background to --bg and text color to --text
+      bizCard.style.background = bg;
+      bizCard.style.color = text;
+
+      // set left side vs right side color differences using variables
+      logoDot.style.background = accent;
+
+      // pick a sensible accent-contrast (light text on dark accent)
+      const lightText = (parseInt(accent.replace('#',''),16) > 0xffffff/2) ? '#111827' : '#ffffff';
+      document.documentElement.style.setProperty('--accent-contrast', lightText);
+    }
+
+    // theme swatch click
+    themes.addEventListener('click', (e) => {
+      const sw = e.target.closest('.theme-swatch');
+      if(!sw) return;
+      // remove selected class
+      document.querySelectorAll('.theme-swatch').forEach(s=>s.classList.remove('selected'));
+      sw.classList.add('selected');
+
+      const accent = sw.dataset.accent;
+      const bg = sw.dataset.bg;
+      const text = sw.dataset.text;
+      applyTheme(accent,bg,text);
+    });
+
+    // set initial theme from selected swatch
+    (function initTheme(){
+      const sel = document.querySelector('.theme-swatch.selected');
+      if(sel) applyTheme(sel.dataset.accent, sel.dataset.bg, sel.dataset.text);
+    })();
+
+    // --------------------------
+    // Download actions (html2canvas + jsPDF)
+    // --------------------------
+    const { jsPDF } = window.jspdf; // from UMD bundle
+
+    // Utility to capture the card and return a blob or dataURL
+    async function captureCard(scale = 2){
+      // html2canvas options: use background color, allow higher resolution via scale
+      const opts = {
+        backgroundColor: null,
+        scale: scale,
+        useCORS: true,
+        logging:false
+      };
+      const canvas = await html2canvas(bizCard, opts);
+      return canvas;
+    }
+
+    document.getElementById('download-png').addEventListener('click', async () => {
+      try {
+        const scale = 3; // higher resolution for PNG
+        const canvas = await captureCard(scale);
+        // convert to blob and download
+        canvas.toBlob((blob) => {
+          const name = (inputName.value || 'card').replace(/\s+/g,'_');
+          const link = document.createElement('a');
+          link.download = `${name}_card.png`;
+          link.href = URL.createObjectURL(blob);
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+          URL.revokeObjectURL(link.href);
+        }, 'image/png', 1);
+      } catch(err){
+        alert('Error capturing PNG: ' + err);
+      }
+    });
+
+    document.getElementById('download-pdf').addEventListener('click', async () => {
+      try{
+        // capture card as high-res image
+        const canvas = await captureCard(3);
+        const imgData = canvas.toDataURL('image/png');
+
+        // Create a PDF that fits the image nicely.
+        // Use jsPDF's "portrait" A4 size (210x297 mm) or letter; we'll scale to fit an A4 page with margins.
+        const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+
+        // Convert canvas pixel size to mm. We need image dimensions in mm to keep ratio.
+        const pxToMm = (px) => px * 0.264583; // 1px ≈ 0.264583 mm at 96dpi
+        const imgWmm = pxToMm(canvas.width);
+        const imgHmm = pxToMm(canvas.height);
+
+        // Compute max width on PDF page (leave margins)
+        const pageW = pdf.internal.pageSize.getWidth() - 20; // 10mm margin each side
+        const pageH = pdf.internal.pageSize.getHeight() - 20;
+
+        let drawW = imgWmm;
+        let drawH = imgHmm;
+
+        // scale down if too big
+        const scale = Math.min(pageW / drawW, pageH / drawH, 1);
+        drawW = drawW * scale;
+        drawH = drawH * scale;
+
+        // center on page
+        const x = (pdf.internal.pageSize.getWidth() - drawW) / 2;
+        const y = (pdf.internal.pageSize.getHeight() - drawH) / 2;
+
+        pdf.addImage(imgData, 'PNG', x, y, drawW, drawH, undefined, 'FAST');
+
+        const name = (inputName.value || 'card').replace(/\s+/g,'_');
+        pdf.save(`${name}_card.pdf`);
+
+      } catch(err){
+        alert('Error creating PDF: ' + err);
+      }
+    });
+
+    // Accessibility: allow Enter to update (already covered by input event)
+    // Nothing more required.
+
+  </script>
+</body>
+</html>
